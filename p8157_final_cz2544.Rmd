@@ -1,0 +1,146 @@
+---
+title: "LDA_final_cz2544"
+author: "Chunxiao Zhai"
+date: "12/9/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(lme4)
+library(geepack)
+knitr::opts_chunk$set(echo = TRUE)
+```
+Objective: Evaluate the efficacy of three different interventions to decrease alcohol assumption in 60 days and to prevent relapse in alcohal dependent patients through a randomized clinical trial.
+
+Abstract(200 words):
+
+
+1. Checking validity of radomization in terms of gender and disease baseline condition.
+```{r read_data}
+liquor = read.table(file = "ALCDEP.txt", header = TRUE)
+liquor$Treatment = as.factor(liquor$Treatment)
+liquor$Gender = as.factor(liquor$Gender)
+# liquor$Relapse = as.factor(liquor$Relapse)
+discrip = liquor[2:7] %>% skimr::skim() # table 1 
+
+# examin pairwise distribution ballance:
+liquor %>% group_by(Treatment, Gender) %>% count() 
+liquor %>% ungroup() %>% 
+  ggplot(aes(y=ND0,color = Gender))+geom_boxplot()+facet_grid(~Treatment)+
+  ggtitle('Number of drinks by gender and intervention, Boxplot')
+
+liquor %>% group_by(Treatment, Gender) %>% select(Relapse) %>% skimr::skim() %>%
+  filter(stat=="mean") %>% 
+  select(Gender,Treatment,formatted) %>% spread(key = 'Treatment',value = 'formatted') #table 2
+```
+For the 314 subjects in this study, there are 171 males and 143 females. The randomization assinged 106 to treatment 1, 107 to treatment 2 and 101 to treatment 3. When examine gender distribution in each treatment group, more males than females happened in treatment 2 (62:45) and 3 (57:44). There is no missing value (table 1).
+When checking the balance of baseline alcohol dependence, females show significantly lower dependence in all three groups, the distribution of baseline alcohol dependence in 3 treatment groups are similar. The drastic gender difference in disease baseline should be considered in all following analysis (stratify by gender).
+
+The 6 month relapse rate is highest in intervention 1 for both male and female (M:85%, F:80%), lower in intervention 2 (M:45%, F:47%), and lowest in intervention 3 (M:12%, F:16%) (table 2).
+
+2.  Exploratory analysis of treatment effect over time.
+```{r EDA}
+# put data in long format:
+liquor_l = liquor %>%pivot_longer(ND0:ND60, names_to = "time", values_to = "number_of_drinks")
+# plot over time in each group
+set.seed(2544)
+female.1 = liquor %>% filter(Gender==1,Treatment == 1)
+female.2 = liquor %>% filter(Gender==1,Treatment == 2)
+female.3 = liquor %>% filter(Gender==1,Treatment == 3)
+male.1 = liquor %>% filter(Gender==0,Treatment == 1)
+male.2 = liquor %>% filter(Gender==0,Treatment == 2)
+male.3 = liquor %>% filter(Gender==0,Treatment == 3)
+
+highlight = cbind(sample(female.1$sid,2,replace = FALSE),
+                  sample(female.2$sid,2,replace = FALSE),
+                  sample(female.3$sid,2,replace = FALSE),
+                  sample(male.1$sid,2,replace = FALSE),
+                  sample(male.2$sid,2,replace = FALSE),
+                  sample(male.3$sid,2,replace = FALSE))
+liquor_l %>% 
+  ggplot(aes(x=time,y = number_of_drinks, group = sid) )+
+  geom_line(color = 'grey')+
+  geom_line(aes(color = Gender), data = subset(liquor_l, sid%in%highlight)) +  
+  facet_grid(~Treatment)+ggtitle('Number of drinks by gender and intervention, Spaghetti Plot')
+```
+The treatment effect of each intervention does not differ by gender, but three different inverventions have different patterns. Intervention 2 show continuous decrease during the follow up period. However, intervention 1 and 3 show big drop at 30 day but no change from 30 day to 60 day.
+
+```{r ND0 as factor}
+median = liquor %>% group_by(Gender) %>% select(ND0) %>%
+  skimr::skim() %>% filter(stat == "p50") %>% select(Gender,formatted) # gender 0 183, gender 1 66
+female = liquor %>% filter(Gender==1)%>% mutate(baseline= if_else(ND0>66,"F_Hi","F_Lo"))
+male = liquor %>% filter(Gender==0)%>% mutate(baseline= if_else(ND0>183,"M_Hi","M_Lo"))
+liquor_l2 = rbind(female,male) %>%
+  pivot_longer(ND0:ND60, names_to = "time", values_to = "number_of_drinks") %>% 
+  mutate(baseline = as.factor(baseline))
+
+female.1 = female %>% filter(Gender==1,Treatment == 1)
+female.2 = female %>% filter(Gender==1,Treatment == 2)
+female.3 = female %>% filter(Gender==1,Treatment == 3)
+male.1 = male %>% filter(Gender==0,Treatment == 1)
+male.2 = male %>% filter(Gender==0,Treatment == 2)
+male.3 = male %>% filter(Gender==0,Treatment == 3)
+  
+highlight_f = cbind(sample(subset(female.1,baseline=="F_Hi")$sid,2,replace = FALSE),
+                    sample(subset(female.2,baseline=="F_Hi")$sid,2,replace = FALSE),
+                    sample(subset(female.3,baseline=="F_Hi")$sid,2,replace = FALSE),
+                    sample(subset(female.1,baseline=="F_Lo")$sid,2,replace = FALSE),
+                    sample(subset(female.2,baseline=="F_Lo")$sid,2,replace = FALSE),
+                    sample(subset(female.3,baseline=="F_Lo")$sid,2,replace = FALSE))
+                  
+highlight_m = cbind(sample(subset(male.1,baseline=="M_Hi")$sid,2,replace = FALSE),
+                    sample(subset(male.2,baseline=="M_Hi")$sid,2,replace = FALSE),
+                    sample(subset(male.3,baseline=="M_Hi")$sid,2,replace =FALSE),
+                    sample(subset(male.1,baseline=="M_Lo")$sid,2,replace = FALSE),
+                    sample(subset(male.2,baseline=="M_Lo")$sid,2,replace = FALSE),
+                    sample(subset(male.3,baseline=="M_Lo")$sid,2,replace = FALSE))
+
+liquor_l2 %>% filter(Gender==1) %>% 
+  ggplot(aes(x=time,y = number_of_drinks, group = sid) )+
+  geom_line(color = 'grey')+
+  geom_line(aes(color = baseline), data = subset(liquor_l2, sid%in%highlight_f)) + 
+  facet_grid(~Treatment:baseline)+
+  ggtitle('Number of drinks by baseline and intervention in female, Spaghetti Plot')
+liquor_l2 %>% filter(Gender==0) %>% 
+  ggplot(aes(x=time,y = number_of_drinks, group = sid) )+
+  geom_line(color = 'grey')+
+  geom_line(aes(color = baseline), data = subset(liquor_l2, sid%in%highlight_m)) + 
+  facet_grid(~Treatment:baseline)+
+  ggtitle('Number of drinks by baseline and intervention in male, Spaghetti Plot')
+
+female_r = female %>% group_by(Treatment, baseline) %>% select(Relapse) %>% skimr::skim() %>%
+  filter(stat=="mean") %>% 
+  select(baseline,Treatment,formatted) %>% spread(key = 'Treatment',value = 'formatted')
+male_r = male %>% group_by(Treatment, baseline) %>% select(Relapse) %>% skimr::skim() %>%
+  filter(stat=="mean") %>% 
+  select(baseline,Treatment,formatted) %>% spread(key = 'Treatment',value = 'formatted')
+```
+
+When split the data by median baseline alcohol dependence in each gender group, the number of drinks of high baseline subjects in both genders drop faster than low baseline subjects in first 30 days of intervention, to the extent that number of drinks in the first 30 days are similar for subjects in the same treatment group regardless of baseline dependence. The change from number of drinks in first 30 days (0 to 30), to second 30 days (30 to 60)
+for both bathline levels are similar in male and female.
+6 month relapse rates are not affected by baseline alcohol dependence level except for male patients in intervention 3, where subjects with high baseline level have lower relapse rate.
+
+3. Model building for treatment effect on number of drinks and 6 month relapse rate.
+```{r ND_mdl}
+# start with full model to include all potential interactions
+
+```
+
+```{r rela_mdl}
+# start with full model to include all potential interactions
+
+```
+
+4. Results
+
+5. Conclusion
+
+6. Caveats 
+i)model limitation
+ii)unexpected results
+iii)suggestion for future studies
+
+7. Discussion
