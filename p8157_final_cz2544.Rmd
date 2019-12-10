@@ -11,6 +11,7 @@ library(ggplot2)
 library(MASS)
 library(lme4)
 library(geepack)
+library(ggResidpanel)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 Objective: Evaluate the efficacy of three different interventions to decrease alcohol assumption in 60 days and to prevent relapse in alcohal dependent patients through a randomized clinical trial.
@@ -121,18 +122,74 @@ male_r = male %>% group_by(Treatment, baseline) %>% select(Relapse) %>% skimr::s
 
 When split the data by median baseline alcohol dependence in each gender group, the number of drinks of high baseline subjects in both genders drop faster than low baseline subjects in first 30 days of intervention, to the extent that number of drinks in the first 30 days are similar for subjects in the same treatment group regardless of baseline dependence. The change from number of drinks in first 30 days (0 to 30), to second 30 days (30 to 60)
 for both bathline levels are similar in male and female.
-6 month relapse rates are not affected by baseline alcohol dependence level except for male patients in intervention 3, where subjects with high baseline level have lower relapse rate.
+6 month relapse rates are not affected by baseline alcohol dependence level except for male patients in intervention 3, where subjects with high baseline level have lower relapse rate. Potiential influencial points need to be examined.
 
 3. Model building for treatment effect on number of drinks and 6 month relapse rate.
 ```{r ND_mdl}
 # start with full model to include all potential interactions
+# buid mixed effect model to allow subject specific features
 
+glm1 = glmer(number_of_drinks ~ Treatment*baseline*time+(1|sid),
+             data=liquor_l2,family=poisson(link = "log")) 
+# baseline contain gender info
+summary(glm1) 
+# baseline significant, treatment:time significant, baselline:time significant
+# 3-way interaction not significant
+# stratify by gender:
+glm2.1 = glmer(number_of_drinks ~ Treatment*time+baseline*time+(1|sid),
+             data=subset(liquor_l2,Gender==1),family=poisson(link = "log")) 
+summary(glm2.1)
+# Create an interactive panel of the default diagnostic plots
+resid_interact(glm2.1) #fit good, sensitivity analysis check sid 301, 289
+resid_xpanel(glm2.1)
+
+# remove sid 301, 289
+data_301 = liquor_l2 %>% filter(sid!=301)
+data_289 = liquor_l2 %>% filter(sid!=289)
+glm2.1.1 = glmer(number_of_drinks ~ Treatment*time+baseline*time+(1|sid),
+             data=subset(data_301,Gender==1),family=poisson(link = "log")) 
+summary(glm2.1.1) # 301 does not change conclusion
+glm2.1.2 = glmer(number_of_drinks ~ Treatment*time+baseline*time+(1|sid),
+             data=subset(data_289,Gender==1),family=poisson(link = "log")) 
+summary(glm2.1.2) # 289 does not change conclusion
+
+
+glm2.2 = glmer(number_of_drinks ~ Treatment*time+baseline*time+(1|sid),
+             data=subset(liquor_l2,Gender==0),family=poisson(link = "log")) 
+summary(glm2.2)
+resid_interact(glm2.2) #fit good
+resid_xpanel(glm2.2)
+
+#for 2 genders' results similer, try only gender no baseline model(treatment:gender not significant):
+glm2.3 = glmer(number_of_drinks ~ Treatment*time+Gender+(1|sid),
+             data=liquor_l,family=poisson(link = "log")) 
+summary(glm2.3)
+resid_interact(glm2.3)
 ```
+For male patients and female patients have very different baseline levels, analysis of treatment effect is only compared in each gender stratum.
+Fit linear mixed effect model in each gender, baseline alcohol dependence for a typical female patient in female high baseline group is 76.67, in female low baseline group is 58.26. A typical female subject in intervention group 3 has the biggest decrease in alcohal dependence at both follow-ups. A typical subject with high baseline level has bigger decrease of alcohol dependence at both followups when comepare to a typical subject in low baseline level group.
+In male patients, similarly, baseline alcohol dependence for a typical patient in male high baseline group is 204.41, in male low baseline group is 167.72. A typical male subject in intervention group 3 has the biggest decrease in alcohal dependence at both follow-ups. A typical subject with high baseline level has bigger decrease of alcohol dependence at both followups when comepare to a typical subject in low baseline level group.
+
+When baseline level is not considered, treatment 3 remain the best for both genders.
 
 ```{r rela_mdl}
 # start with full model to include all potential interactions
+# in female:
+lme1 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=female,id = sid,family=binomial(link = "logit"))
+summary(lme1)
+resid_interact(lme1)
+# in male:
+lme2 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=male,family=binomial(link = "logit")) # baseline contain gender info
+summary(lme2)
+resid_interact(lme2)
 
+# both gender show treatment 3 significantly better, no treatment:baseline interaction
+# combine genders
+lme3 = glmer(Relapse ~ Treatment*Gender+(1|sid),data=liquor,family=binomial(link = "logit")) # baseline contain gender info
+summary(lme3)
+resid_interact(lme3)
 ```
+When compare two treatments
 
 4. Results
 
