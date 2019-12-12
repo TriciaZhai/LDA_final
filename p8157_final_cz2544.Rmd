@@ -14,17 +14,13 @@ library(geepack)
 library(ggResidpanel)
 knitr::opts_chunk$set(echo = TRUE)
 ```
-Objective: Evaluate the efficacy of three different interventions to decrease alcohol assumption in 60 days and to prevent relapse in alcohal dependent patients through a randomized clinical trial.
-
-Abstract(200 words):
-
 
 1. Checking validity of radomization in terms of gender and disease baseline condition.
 ```{r read_data}
 liquor = read.table(file = "ALCDEP.txt", header = TRUE)
 liquor$Treatment = as.factor(liquor$Treatment)
 liquor$Gender = as.factor(liquor$Gender)
-# liquor$Relapse = as.factor(liquor$Relapse)
+liquor$Relapse = as.factor(liquor$Relapse)
 discrip = liquor[2:7] %>% skimr::skim() # table 1 
 
 # examin pairwise distribution ballance:
@@ -33,14 +29,14 @@ liquor %>% ungroup() %>%
   ggplot(aes(y=ND0,color = Gender))+geom_boxplot()+facet_grid(~Treatment)+
   ggtitle('Number of drinks by gender and intervention, Boxplot')
 
-liquor %>% group_by(Treatment, Gender) %>% select(Relapse) %>% skimr::skim() %>%
-  filter(stat=="mean") %>% 
+tbl2 = liquor %>% group_by(Treatment, Gender) %>% 
+  skimr::skim()%>% 
   select(Gender,Treatment,formatted) %>% spread(key = 'Treatment',value = 'formatted') #table 2
 ```
 For the 314 subjects in this study, there are 171 males and 143 females. The randomization assinged 106 to treatment 1, 107 to treatment 2 and 101 to treatment 3. When examine gender distribution in each treatment group, more males than females happened in treatment 2 (62:45) and 3 (57:44). There is no missing value (table 1).
 When checking the balance of baseline alcohol dependence, females show significantly lower dependence in all three groups, the distribution of baseline alcohol dependence in 3 treatment groups are similar. The drastic gender difference in disease baseline should be considered in all following analysis (stratify by gender).
 
-The 6 month relapse rate is highest in intervention 1 for both male and female (M:85%, F:80%), lower in intervention 2 (M:45%, F:47%), and lowest in intervention 3 (M:12%, F:16%) (table 2).
+The 6 month relapse rate is highest in intervention 1 for both male and female (M:85%, F:80%), lower in intervention 2 (M:45%, F:47%), and lowest in intervention 3 (M:12%, F:16%).
 
 2.  Exploratory analysis of treatment effect over time.
 ```{r EDA}
@@ -163,7 +159,7 @@ resid_xpanel(glm2.2)
 #for 2 genders' results similer, try only gender no baseline model(treatment:gender not significant):
 glm2.3 = glmer(number_of_drinks ~ Treatment*time+Gender+(1|sid),
              data=liquor_l,family=poisson(link = "log")) 
-summary(glm2.3)
+summary(glm2.3)  # effect size confounded toward null
 resid_interact(glm2.3)
 ```
 For male patients and female patients have very different baseline levels, analysis of treatment effect is only compared in each gender stratum.
@@ -175,29 +171,56 @@ When baseline level is not considered, treatment 3 remain the best for both gend
 ```{r rela_mdl}
 # start with full model to include all potential interactions
 # in female:
-lme1 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=female,id = sid,family=binomial(link = "logit"))
+lme1 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=female,family=binomial(link = "logit"))
 summary(lme1)
 resid_interact(lme1)
 # in male:
-lme2 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=male,family=binomial(link = "logit")) # baseline contain gender info
+lme2 = glmer(Relapse ~ Treatment*baseline+(1|sid),data=male,family=binomial(link = "logit")) 
 summary(lme2)
 resid_interact(lme2)
 
 # both gender show treatment 3 significantly better, no treatment:baseline interaction
 # combine genders
-lme3 = glmer(Relapse ~ Treatment*Gender+(1|sid),data=liquor,family=binomial(link = "logit")) # baseline contain gender info
+lme3 = glmer(Relapse ~ Treatment*Gender+(1|sid),data=liquor,family=binomial(link = "logit")) 
 summary(lme3)
 resid_interact(lme3)
+
+# female
+lme1.1 = glmer(Relapse ~ Treatment+(1|sid),data=female,family=binomial(link = "logit"))
+summary(lme1.1)
+# male
+lme2.1 = glmer(Relapse ~ Treatment+ND60+(1|sid),data=male,family=binomial(link = "logit"))
+summary(lme2.1)
 ```
-When compare two treatments
+
 
 4. Results
+i) Primary outcome: : Effect of interventions and Time on Daily Drinking Outcomes
+ii) Secondary Outcome, Sensitivity Analyses, and Exploratory Analyses
 
 5. Conclusion
 
 6. Caveats 
-i)model limitation
-ii)unexpected results
-iii)suggestion for future studies
+i) model limitation (counting drinks)
+ii) unexpected results (motivation)
+iii) suggestion for future studies 
 
 7. Discussion
+These results indicate that
+may be most useful in 
+harm reduction approach characterized by safer consumption rather than full abstinence.
+
+Involvement of norepinephrine
+
+Limitations of the present study 
+
+individuals with other anxiety disorders
+
+random-slope models should always be considered.
+
+definition of relapse for AUD (alcohal use disorder)
+
+in reward circuitry 
+i) bias(recall, )
+ii) compare to published results
+iii) other factors, length of abuse, motivation, stress, genetic, neuro biology
